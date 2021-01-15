@@ -1,81 +1,43 @@
-Param(
- [string]$CreateTask="no",
- [string]$SetHisto="-"
-)
+# Set Parameters
+$Params = @{
 
-Clear-Host
-
- # $ErrorActionPreference = "silentlycontinue"
-$nl = [Environment]::NewLine
-
-Write-Host "Load $PSScriptRoot\wsl_params.ps1..." -ForegroundColor DarkCyan
-. "$PSScriptRoot\wsl_params.ps1"
-
-# Write-Host "CreateTask=$CreateTask, SetHisto=$SetHisto, PSScriptRoot=$PSScriptRoot" -ForegroundColor Yellow
-
-if ($CreateTask -eq "yes")
-{
-
-  # Self-elevate the script if required
-  if (-Not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] 'Administrator')) {
-    if ([int](Get-CimInstance -Class Win32_OperatingSystem | Select-Object -ExpandProperty BuildNumber) -ge 6000) {  
-      $CommandLine = "-File `"" + $MyInvocation.MyCommand.Path + "`" " + $CreateTask + " " + $SetHisto
-      Write-Host "Start-Process -FilePath PowerShell.exe -Verb Runas -ArgumentList $CommandLine"
-      Start-Process -FilePath PowerShell.exe -Verb Runas -ArgumentList $CommandLine
-      Exit
+  Distro    = 'Arch'
+  StopWSL   = 'wsl.exe --distribution $($Params.Distro) --shutdown'
+  GetWSLVer = '$(wsl.exe --distribution $($Params.Distro) --list --all --verbose)'
+  GetIPCmd  = '$(wsl.exe --distribution $($Params.Distro) ip route get 1.1.1.1 | grep -oP "src \K\S+")'
+  # Services  = ('sudo systemctl restart sshd; netstat -an | grep -ai list | grep -ai 11098')
+  Services  = ('sudo systemctl restart sshd; netstat -an | findstr -i list | findstr -i $Port')
+  Ports = @{
+    11098 = @{
+      Protocol     = ('TCP')
+      RuleDescript = 'WLS_$Port $Protocol'
+      Profile      = ('domain','private')
     }
+  }      
+  
+  wsl1 = @{
+    # DelFirewallRule = 'Remove-NetFirewallRule -InputObject $(Get-NetFirewallPortFilter | Where LocalPort -eq xxx | Get-NetFirewallRule)'
+    DelFirewallRule = 'netsh advfirewall firewall delete rule name=all protocol=$Protocol localport=$Port'
+    AddFirewallRule = 'netsh advfirewall firewall add rule name="$RuleName" dir=in action=allow protocol=$Protocol localport=$Port $RuleProfile'
   }
-
-  $TaskName          = $Params.Task.TaskName
-  $unRegister        = $ExecutionContext.InvokeCommand.ExpandString($Params.Task.unRegister)
-  $TaskAction        = Invoke-Expression $ExecutionContext.InvokeCommand.ExpandString($Params.Task.TaskAction)
-  $TaskUserPrincipal = Invoke-Expression $ExecutionContext.InvokeCommand.ExpandString($Params.Task.TaskUserPrincipal)
-  $TaskTrigger       = Invoke-Expression $ExecutionContext.InvokeCommand.ExpandString($Params.Task.TaskTrigger)
-  $TaskSettings      = Invoke-Expression $ExecutionContext.InvokeCommand.ExpandString($Params.Task.TaskSettings)
-
-  if( Get-ScheduledTask | Where-Object {$_.TaskName -like $($Params.Task.TaskName) } ) { 
-    Write-Host "  - Remove Task $($Params.Task.TaskName)" -ForegroundColor Red
-    Write-Host "  - $unRegister" -ForegroundColor Red
-    Write-Host "$($nl)"
-    Invoke-Expression $unRegister
-  } 
-
-  Write-Host "  - TaskAction=$($Params.Task.TaskAction)".Replace('$PSScriptRoot',$PSScriptRoot) -ForegroundColor Yellow
-  Write-Host "  - TaskUserPrincipal=$($Params.Task.TaskUserPrincipal)".Replace('$($Params.Task.User)',$($Params.Task.User)) -ForegroundColor Yellow
-  Write-Host "  - TaskTrigger=$($Params.Task.TaskTrigger)" -ForegroundColor Yellow
-  Write-Host "  - TaskSettings=$($Params.Task.TaskSettings)" -ForegroundColor Yellow
   
-  Write-Host "$($nl)  - Register=$($Params.Task.Register)".Replace('$TaskName',$TaskName).Replace(
-  '$TaskAction', $($Params.Task.TaskAction).Replace('$PSScriptRoot',$PSScriptRoot)).Replace(
-  '$TaskUserPrincipal', $($Params.Task.TaskUserPrincipal).Replace('$($Params.Task.User)',$($Params.Task.User))).Replace(
-  '$TaskTrigger', $($Params.Task.TaskTrigger)).Replace(
-  '$TaskSettings', $($Params.Task.TaskSettings)) -ForegroundColor Cyan
-  
-  Invoke-Expression "$($Params.Task.Register)"
-}
-
-if ( $SetHisto.Length -gt 1 )
-{
-
-  # Self-elevate the script if required
-  if (-Not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] 'Administrator')) {
-    if ([int](Get-CimInstance -Class Win32_OperatingSystem | Select-Object -ExpandProperty BuildNumber) -ge 6000) {  
-      $CommandLine = "-File `"" + $MyInvocation.MyCommand.Path + "`" " + $CreateTask + " " + $SetHisto
-      Write-Host "Start-Process -FilePath PowerShell.exe -Verb Runas -ArgumentList $CommandLine"
-      Start-Process -FilePath PowerShell.exe -Verb Runas -ArgumentList $CommandLine
-      Exit
-    }
+  wsl2 = @{
+    DelProxyV4ToV4  = 'netsh int portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=$Port'
+    DelFirewallRule = 'netsh advfirewall firewall delete rule name=all protocol=$Protocol localport=$Port'
+    AddProxyV4ToV4  = 'netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=$Port connectaddress=$wslip connectport=$Port'
+    AddFirewallRule = 'netsh advfirewall firewall add rule name="$RuleName" dir=in action=allow protocol=$Protocol localport=$Port $RuleProfile'
   }  
   
-  if ($SetHisto -eq "yes") { $action = "`$True" } else { $action = "`$False" }
-  
-  $EnableHisto = $ExecutionContext.InvokeCommand.ExpandString($Params.Task.EnableHisto) + $action
+  Task = @{
+    User     = "$env:username"
+    TaskName = "Wsl_"
+    TaskAction        = 'New-ScheduledTaskAction -Execute Powershell.exe -Argument "-executionpolicy remotesigned -File ""$PSScriptRoot\StartWSLServices.ps1""" -WorkingDirectory "$PSScriptRoot" '
+    TaskTrigger       = 'New-ScheduledTaskTrigger -AtStartup'
+    TaskUserPrincipal = 'New-ScheduledTaskPrincipal -UserId "$($Params.Task.User)" -RunLevel Highest -LogonType S4U'
+    TaskSettings      = 'New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 20) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 60) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RunOnlyIfNetworkAvailable -DontStopOnIdleEnd -Compatibility Win8'
+    Register          = 'Register-ScheduledTask -TaskName "$TaskName" -Action $TaskAction -Principal $TaskUserPrincipal -Trigger $TaskTrigger -Settings $TaskSettings -Force'
 
-  Write-Output "" 
-  # Write-Output "action=$action" 
-  # Write-Host "  - EnableHisto=$EnableHisto" -ForegroundColor Yellow
-  Invoke-Expression $($EnableHisto)
-}  
-
-Write-Host "Press any key to continue..."
-$Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    unRegister        = 'Unregister-ScheduledTask -TaskName "$($Params.Task.TaskName)" -Confirm:`$False'
+    EnableHisto       = "wevtutil set-log Microsoft-Windows-TaskScheduler/Operational /enabled:$($action)"
+  }
+}
