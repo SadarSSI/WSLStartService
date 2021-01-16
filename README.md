@@ -33,7 +33,7 @@ StartWSLServices.ps1: script that will be called by the Windows scheduled task f
 
 Why do this ?
 
-For example: to connect some remote windows through an ssh tunnel to open an rdp session, a powershell, make ansible or use opensource programs like borgbackup to simply save data in a remote ssh repository.
+For example: to connect some remote windows through an ssh tunnel to open an rdp session, a powershell, make ansible or use opensource programs like borgbackup to simply save data in a remote repository through ssh tunnel.
 
  - Yes, it is preferable for me to connect a few windows (not in a domain) with the simplicity of the tools found in linux
  - Yes, I prefer an openssh in a linux wsl because the openssh windows 10 server does not provide access to a linux: just a bash shell
