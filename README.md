@@ -1,5 +1,5 @@
-# WSLStartService : How to make WSL2 run services at Windows startup without user login
-Collection of powershell scripts to automatically start linux wsl or wsl 2 services when starting windows without user login
+# WSLStartService : How to make WSL run services at Windows startup without user login
+Collection of powershell scripts to automatically start linux wsl1 or wsl2 services when starting windows
 
 wsl_Parameters.ps1: script containing a json array that describes the information needed to:
  - the creation of a windows scheduled task which will be launched each time Windows is restarted (without user login)
