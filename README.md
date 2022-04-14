@@ -1,5 +1,6 @@
 # WSLStartService : 
-out of date ! see new version ###https://github.com/SadarSSI/WSL-WatchDog 
+out of date ! see new version here https://github.com/SadarSSI/WSL-WatchDog 
+
 What's new : configuration via a yaml file and prevent last WSL bug / regression see : https://github.com/microsoft/WSL/issues/8161
 enjoy !
 
